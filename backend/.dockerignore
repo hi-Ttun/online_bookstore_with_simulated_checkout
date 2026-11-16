@@ -1,0 +1,10 @@
+# Loại khỏi Docker build context
+target/
+docs/
+scripts/
+db/
+*.log
+.git/
+.idea/
+.vscode/
+docker-compose.yml

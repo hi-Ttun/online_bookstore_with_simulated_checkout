@@ -1,0 +1,55 @@
+# Hạ tầng phát triển cục bộ: PostgreSQL và Pub/Sub emulator. Thông tin đăng nhập chỉ dùng cho môi trường local.
+#   docker compose up -d      khởi động
+#   docker compose down       dừng (giữ dữ liệu)
+#   docker compose down -v    dừng và xóa dữ liệu
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: bookstore
+      POSTGRES_USER: bookstore
+      POSTGRES_PASSWORD: bookstore
+    ports:
+      - "5433:5432"   # 5433 để không trùng với PostgreSQL có thể đã cài sẵn trên máy
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db:/seed:ro   # docker compose exec postgres psql -U bookstore -d bookstore -f /seed/seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bookstore -d bookstore"]
+      interval: 5s
+      retries: 10
+
+  pubsub:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    command: gcloud beta emulators pubsub start --host-port=0.0.0.0:8085 --project=local-project
+    ports:
+      - "8085:8085"
+
+  # Tạo topic và subscription trên emulator mỗi lần khởi động (emulator không lưu trạng thái).
+  #   order-events-worker     push tới ứng dụng chạy trên máy; 5 lần lỗi liên tiếp chuyển sang order-events-dlq
+  #   order-events-debug      pull, dùng để xem message relay đã gửi
+  #   order-events-dlq-debug  pull trên dead-letter topic
+  pubsub-init:
+    image: curlimages/curl:8.11.1
+    depends_on: [pubsub]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        E=http://pubsub:8085/v1/projects/local-project
+        J='Content-Type: application/json'
+        T=projects/local-project/topics
+        curl -sS --retry 30 --retry-connrefused --retry-delay 1 -X PUT $$E/topics/order-events
+        curl -sS -X PUT $$E/topics/order-events-dlq
+        curl -sS -X PUT $$E/subscriptions/order-events-debug -H "$$J" \
+          -d "{\"topic\":\"$$T/order-events\",\"ackDeadlineSeconds\":10}"
+        curl -sS -X PUT $$E/subscriptions/order-events-worker -H "$$J" -d "{
+          \"topic\":\"$$T/order-events\", \"ackDeadlineSeconds\":30,
+          \"pushConfig\":{\"pushEndpoint\":\"http://host.docker.internal:8080/internal/pubsub/push\"},
+          \"retryPolicy\":{\"minimumBackoff\":\"1s\",\"maximumBackoff\":\"10s\"},
+          \"deadLetterPolicy\":{\"deadLetterTopic\":\"$$T/order-events-dlq\",\"maxDeliveryAttempts\":5}}"
+        curl -sS -X PUT $$E/subscriptions/order-events-dlq-debug -H "$$J" \
+          -d "{\"topic\":\"$$T/order-events-dlq\",\"ackDeadlineSeconds\":10}"
+        echo "pubsub-init: done"
+
+volumes:
+  pgdata:
