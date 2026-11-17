@@ -1,0 +1,36 @@
+name: Infra CI (Terraform)
+
+# Kiểm tra code hạ tầng trên mỗi PR/push. Không cần tài khoản GCP:
+# init -backend=false chỉ tải provider, không đọc state, không tạo tài nguyên.
+on:
+  pull_request:
+    paths: ["infra/**", ".github/workflows/infra-ci.yml"]
+  push:
+    branches: [main]
+    paths: ["infra/**", ".github/workflows/infra-ci.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Init (không kết nối backend)
+        run: terraform init -backend=false -input=false
+
+      - name: Validate
+        run: terraform validate
+
+      - name: Format check (chỉ cảnh báo)
+        run: terraform fmt -check -recursive -diff || echo "::warning::Chạy 'terraform fmt -recursive' trong infra/ để chuẩn hóa định dạng"
