@@ -1,0 +1,36 @@
+# nginx image tự thay ${PORT} khi khởi động (envsubst trên thư mục templates).
+server {
+    listen ${PORT};
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Header bảo mật cơ bản
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+
+    # File build có hash trong tên: cache lâu dài.
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        add_header X-Content-Type-Options nosniff always;
+    }
+
+    # index.html và config.js luôn lấy bản mới (đổi cấu hình không cần xóa cache).
+    location = /config.js {
+        add_header Cache-Control "no-store";
+    }
+    location = /index.html {
+        add_header Cache-Control "no-cache";
+    }
+
+    location = /healthz {
+        default_type text/plain;
+        return 200 "ok";
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

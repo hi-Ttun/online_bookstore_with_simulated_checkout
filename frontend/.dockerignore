@@ -1,0 +1,6 @@
+node_modules
+dist
+mock
+docs
+.env*
+*.log
