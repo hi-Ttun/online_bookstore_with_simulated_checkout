@@ -1,0 +1,11 @@
+{
+  "name": "online-bookstore-with-simulated-checkout",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Final Project 04 - Online Bookstore with Simulated Checkout",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "mock": "node frontend/mock/server.mjs",
+    "build": "npm --prefix frontend run build"
+  }
+}

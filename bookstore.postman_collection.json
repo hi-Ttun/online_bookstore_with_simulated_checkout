@@ -1,0 +1,399 @@
+{
+  "info": {
+    "_postman_id": "b8f54c9a-6241-4712-9c9e-online-bookstore",
+    "name": "Online Bookstore with Simulated Checkout",
+    "description": "Bộ Collection kiểm thử toàn diện các API của đồ án Cloud Computing: Công khai, Xác thực Token, Checkout Idempotency, Quản trị Store Operator, Biến động kho và Đối soát.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "alice_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "operator_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "last_order_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Public APIs (Công khai)",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/healthz",
+              "host": ["{{base_url}}"],
+              "path": ["healthz"]
+            }
+          }
+        },
+        {
+          "name": "Lấy danh mục 50 sách",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products?page=0&size=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "50" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Chi tiết sách (ID 1)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Authentication (Lấy Token)",
+      "item": [
+        {
+          "name": "Lấy Token Khách hàng (Alice)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.accessToken) {",
+                  "    pm.collectionVariables.set('alice_token', jsonData.accessToken);",
+                  "    console.log('Saved alice_token:', jsonData.accessToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/dev/token?user=alice",
+              "host": ["{{base_url}}"],
+              "path": ["dev", "token"],
+              "query": [{ "key": "user", "value": "alice" }]
+            }
+          }
+        },
+        {
+          "name": "Lấy Token Quản trị (Operator)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.accessToken) {",
+                  "    pm.collectionVariables.set('operator_token', jsonData.accessToken);",
+                  "    console.log('Saved operator_token:', jsonData.accessToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/dev/token?user=operator",
+              "host": ["{{base_url}}"],
+              "path": ["dev", "token"],
+              "query": [{ "key": "user", "value": "operator" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Security Tests (Kiểm thử bảo mật)",
+      "item": [
+        {
+          "name": "Checkout KHÔNG kèm Token -> Mong đợi 401 Unauthorized",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "test-no-auth-001" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [{ \"productId\": 1, \"quantity\": 1 }],\n  \"paymentScenario\": \"SUCCESS\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/checkout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "checkout"]
+            }
+          }
+        },
+        {
+          "name": "Khách hàng Alice gọi API Quản trị -> Mong đợi 403 Forbidden",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{alice_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/orders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Store Operator gọi API Quản trị -> Mong đợi 200 OK",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{operator_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/orders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "orders"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Customer Checkout & Idempotency",
+      "item": [
+        {
+          "name": "Đặt hàng SUCCESS (Lần 1 -> 201 Created)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Sinh Idempotency Key duy nhất nếu chưa có",
+                  "if (!pm.variables.get('demo_key')) {",
+                  "    pm.variables.set('demo_key', 'key-' + Date.now());",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.orderId) {",
+                  "    pm.collectionVariables.set('last_order_id', jsonData.orderId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{alice_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{demo_key}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"productId\": 2, \"quantity\": 1 }\n  ],\n  \"paymentScenario\": \"SUCCESS\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/checkout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "checkout"]
+            }
+          }
+        },
+        {
+          "name": "Replay cùng Key & cùng Payload (Test 2a -> 200 OK Idempotent)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{alice_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{demo_key}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"productId\": 2, \"quantity\": 1 }\n  ],\n  \"paymentScenario\": \"SUCCESS\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/checkout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "checkout"]
+            }
+          }
+        },
+        {
+          "name": "Replay cùng Key nhưng ĐỔI SỐ LƯỢNG (Test 2b -> 409 Conflict)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{alice_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{demo_key}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"productId\": 2, \"quantity\": 3 }\n  ],\n  \"paymentScenario\": \"SUCCESS\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/checkout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "checkout"]
+            }
+          }
+        },
+        {
+          "name": "Chi tiết đơn hàng vừa tạo (Kiểm tra trạng thái PAID)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{alice_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/orders/{{last_order_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders", "{{last_order_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Danh sách đơn hàng của tôi (Alice)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{alice_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/orders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Store Operator (Quản trị vận hành)",
+      "item": [
+        {
+          "name": "Tổng quan vận hành (Ops Summary - Outbox & Backlog)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{operator_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/ops/summary",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "ops", "summary"]
+            }
+          }
+        },
+        {
+          "name": "Danh sách đơn cần giao (Fulfillment - status=PAID)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{operator_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/orders?status=PAID",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "orders"],
+              "query": [{ "key": "status", "value": "PAID" }]
+            }
+          }
+        },
+        {
+          "name": "Xác nhận giao hàng đơn hàng (POST fulfill -> FULFILLED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{operator_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/orders/{{last_order_id}}/fulfill",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "orders", "{{last_order_id}}", "fulfill"]
+            }
+          }
+        },
+        {
+          "name": "Kiểm tra tồn kho thời gian thực (Inventory)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{operator_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/inventory",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "inventory"]
+            }
+          }
+        },
+        {
+          "name": "Lịch sử biến động kho (Movements - Audit Log)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{operator_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/inventory/movements",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "inventory", "movements"]
+            }
+          }
+        },
+        {
+          "name": "Kích hoạt đối soát thủ công (POST reconcile)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{operator_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/reconcile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "reconcile"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

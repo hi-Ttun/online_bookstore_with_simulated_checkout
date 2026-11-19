@@ -1,3 +1,26 @@
-# Cấu hình IDE cá nhân
+# IDE
 .vscode/
 .idea/
+*.swp
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/*.log
+frontend/.env.local
+
+# Java / Maven / Backend
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+backend/*.log
+
+# Terraform / Cloud
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/terraform.tfvars
+infra/tfplan
+
+# Backup folders
+_backup_branches/
+online_bookstore_with_simulated_checkout-*/
